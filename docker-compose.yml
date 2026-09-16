@@ -19,3 +19,13 @@ services:
     ports:
       - "8002:8080"
 
+  ms-shipments:
+    build: ./svc-shipments
+    container_name: ms-shipments
+    restart: unless-stopped
+    env_file:
+      - ./svc-shipments/.env
+    ports:
+      - "8003:3000"
+
+
