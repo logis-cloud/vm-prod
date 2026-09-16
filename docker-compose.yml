@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  ms-clients:
+    build: ./svc-clients
+    container_name: ms-clients
+    restart: unless-stopped
+    env_file:
+      - ./svc-clients/.env
+    ports:
+      - "8001:8000"
+
+  ms-vehicles: 
+    build: ./svc-vehicles
+    container_name: ms-vehicles
+    restart: unless-stopped
+    env_file: 
+      - ./svc-vehicles/.env
+    ports:
+      - "8002:8080"
+
