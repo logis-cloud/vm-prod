@@ -1,0 +1,231 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Infraestructura Completa Proyecto Cloud - 4 VMs con IaC"
+
+Parameters:
+  AMI:
+    Type: String
+    Default: "ami-0b33d2f1547e52c78"
+    Description: "AMI con Docker y Ubuntu preconfigurados"
+  KeyName:
+    Type: String
+    Default: "vockey"
+    Description: "Clave SSH de AWS"
+
+Resources:
+  # =========================================================
+  # 1. SECURITY GROUPS (REGLAS DE FIREWALL)
+  # =========================================================
+
+  ProdSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Acceso publico para APIs (Prod) y SSH"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: "8000"
+          ToPort: "8000"
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "tcp"
+          FromPort: "8080"
+          ToPort: "8080"
+          CidrIp: "0.0.0.0/0"
+
+  IngestionSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Acceso SSH para VM de Ingesta"
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: "0.0.0.0/0"
+
+  DBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Acceso Privado a Bases de Datos"
+      SecurityGroupIngress:
+        # Permitir SSH desde consola web
+        - IpProtocol: "tcp"
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: "0.0.0.0/0"
+        # Acceso a BDs desde Produccion
+        - IpProtocol: "tcp"
+          FromPort: "3306"
+          ToPort: "3306"
+          SourceSecurityGroupId: !Ref ProdSecurityGroup
+        - IpProtocol: "tcp"
+          FromPort: "5432"
+          ToPort: "5432"
+          SourceSecurityGroupId: !Ref ProdSecurityGroup
+        - IpProtocol: "tcp"
+          FromPort: "27017"
+          ToPort: "27017"
+          SourceSecurityGroupId: !Ref ProdSecurityGroup
+        # Acceso a BDs desde Ingesta (DS)
+        - IpProtocol: "tcp"
+          FromPort: "3306"
+          ToPort: "3306"
+          SourceSecurityGroupId: !Ref IngestionSecurityGroup
+        - IpProtocol: "tcp"
+          FromPort: "5432"
+          ToPort: "5432"
+          SourceSecurityGroupId: !Ref IngestionSecurityGroup
+        - IpProtocol: "tcp"
+          FromPort: "27017"
+          ToPort: "27017"
+          SourceSecurityGroupId: !Ref IngestionSecurityGroup
+
+  # =========================================================
+  # 2. MÁQUINAS VIRTUALES (INSTANCIAS EC2)
+  # =========================================================
+
+  # --- VM 1: BASE DE DATOS ---
+  VMDatabase:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: "VM-BaseDeDatos"
+      ImageId: !Ref AMI
+      InstanceType: "t2.micro"
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref DBSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: "20"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          cd /home/ubuntu
+          # Reemplaza esta URL con tu repositorio de bases de datos
+          git clone https://github.com/logis-cloud/vm-db.git
+          cd vm-db 
+          docker compose up -d
+          chown -R ubuntu:ubuntu /home/ubuntu
+
+  # --- VM 2: PRO vm-dbDUCCIÓN 1 ---
+  VMProd1:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: "VM-Produccion-1"
+      ImageId: !Ref AMI
+      InstanceType: "t2.micro"
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref ProdSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: "20"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          cd /home/ubuntu
+
+          # Microservicio 1
+          git clone https://github.com/logis-cloud/svc-clients.git 
+
+          # Microservicio 2
+          git clone https://github.com/logis-cloud/svc-vehicles.git 
+
+          # Levantar el contenedor 
+          docker compose up -d
+
+          # Ajustar permisos para el usuario ubuntu
+          chown -R ubuntu:ubuntu /home/ubuntu
+
+  # --- VM 3: PRODUCCIÓN 2 ---
+  VMProd2:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: "VM-Produccion-2"
+      ImageId: !Ref AMI
+      InstanceType: "t2.micro"
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref ProdSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: "20"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          cd /home/ubuntu
+
+          # Microservicio 1
+          git clone https://github.com/logis-cloud/svc-clients.git 
+
+          # Microservicio 2
+          git clone https://github.com/logis-cloud/svc-vehicles.git 
+
+          # Levantar el contenedor
+          docker compose up -d
+
+          # Ajustar permisos para el usuario ubuntu
+          chown -R ubuntu:ubuntu /home/ubuntu
+
+  # --- VM 4: INGESTA (Data Science) ---
+  VMIngesta:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: "VM-Ingesta-DS"
+      ImageId: !Ref AMI
+      InstanceType: "t2.micro"
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref IngestionSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: "20"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          cd /home/ubuntu
+          # Si ya tienes repo para ingesta, ponlo aqui. Si no, déjalo preparado.
+          # git clone https://github.com/tu-usuario/repo-ingesta.git
+          chown -R ubuntu:ubuntu /home/ubuntu
+
+  # =========================================================
+  # 3. IPS ELÁSTICAS (Para Producción)
+  # =========================================================
+  EIPProd1:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      InstanceId: !Ref VMProd1
+
+  EIPProd2:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      InstanceId: !Ref VMProd2
+
+# =========================================================
+# 4. OUTPUTS (IPs para configurar tus .env)
+# =========================================================
+Outputs:
+  IPPrivadaVMBaseDeDatos:
+    Description: "IP Privada de la VM de BD (Poner esta IP en los .env de las APIs)"
+    Value: !GetAtt VMDatabase.PrivateIp
+
+  IPPublicaVMProd1:
+    Description: "IP Publica Elastica para Produccion 1"
+    Value: !Ref EIPProd1
+
+  IPPublicaVMProd2:
+    Description: "IP Publica Elastica para Produccion 2"
+    Value: !Ref EIPProd2
