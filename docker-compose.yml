@@ -10,11 +10,11 @@ services:
     ports:
       - "8001:8000"
 
-  ms-vehicles: 
+  ms-vehicles:
     build: ./svc-vehicles
     container_name: ms-vehicles
     restart: unless-stopped
-    env_file: 
+    env_file:
       - ./svc-vehicles/.env
     ports:
       - "8002:8080"
@@ -28,11 +28,20 @@ services:
     ports:
       - "8003:3000"
 
-  ms-tracking: 
+  ms-tracking:
     build: ./svc-tracking
-    container_name: ms-tracking 
+    container_name: ms-tracking
     restart: unless-stopped
-    env_file: 
+    env_file:
       - ./svc-tracking/.env
     ports:
       - "8004:8000"
+
+  ms-analytics:
+    build: ./svc-analytics
+    container_name: ms-analytics
+    restart: unless-stopped
+    env_file:
+      - ./svc-analytics/.env
+    ports:
+      - "8005:8000"
